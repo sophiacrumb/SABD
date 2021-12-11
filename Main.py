@@ -3,6 +3,7 @@ from FileRecord import FileRecord
 from FileSlicer import FileSlicer
 from HashRecord import HashRecord
 from ChunkWriter import ChunkWriter
+from DBConnector import Chunks, Files, ChunkHashes
 
 import hashlib
 
