@@ -10,7 +10,7 @@ class FileSlicer:
         self._filepath = filepath
         self._chunk_order = -1
 
-    def set_chunk_size(self, filepath):
+    def set_chunk_size(self, chunk_size):
         self._chunk_size = chunk_size
 
     def get_filepath(self):
