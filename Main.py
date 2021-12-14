@@ -3,6 +3,7 @@ from FileRecord import FileRecord
 from FileSlicer import FileSlicer
 from HashRecord import HashRecord
 from ChunkWriter import ChunkWriter
+from DBConnector import Chunks, Files, ChunkHashes
 
 import hashlib
 
@@ -19,7 +20,6 @@ def get_full_filepath_in_workdir(filename):
 class Main:
     result_file_name = "result"
 
-    @staticmethod
     def upload(filepath, chunk_size):
         slicer = FileSlicer(filepath, chunk_size)
 
@@ -29,61 +29,47 @@ class Main:
             chunk_data = chunk_with_order[0]
             chunk_order = chunk_with_order[1]
 
-            hash_id = Main.__write_chunk_once_and_return_hash_id(chunk_data)
+            hash_id = Main.__write_chunk_once_and_return_hash_id(chunk_data, chunk_size)
 
             chunk_record = ChunkRecord(chunk_order, file_id, hash_id)
-            # TODO Chunks class is the connector to Chunks table
             Chunks.create_record(chunk_record)
 
 
     @staticmethod
     def __get_file_id_even_if_absent(filepath):
-        # TODO Files class is the connector to Files table
-        # get_record() reads file record from File table by filename
         file_record = Files.get_record(filepath)
-        file_id = file_record.id
         if not file_record:
             file_record = FileRecord(filepath)
-            # TODO create_record creates record in Files table by FileRecord DTO and returns id (primary_key)
-            #  of created record
             file_id = Files.create_record(file_record)
-
+        else:
+            file_id = file_record.id
         return file_id
 
 
     @staticmethod
-    def __write_chunk_once_and_return_hash_id(chunk_data):
+    def __write_chunk_once_and_return_hash_id(chunk_data, chunk_size):
         hashed_chunk = count_hash(chunk_data)
 
-        # TODO ChunkHashes class is the connector to ChunkHashes table
-        # get_hash_record() receives hashed_chunk data and returns hash_record from table or None
         hash_record = ChunkHashes.get_record(hashed_chunk)
-        hash_id = hash_record.id
         if not hash_record:
             links_count = 1
-            hash_record = HashRecord(hashed_chunk, links_count, chunk_data)
-            # TODO create_record creates record in ChunkHashes table by HashRecord DTO and returns id (primary_key)
-            #  of created record
+            hash_record = HashRecord(hashed_chunk, links_count, chunk_size)
             hash_id = ChunkHashes.create_record(hash_record)
             ChunkWriter.write_chunk(chunk_data, get_full_filepath_in_workdir(hash_id))
         else:
-            # TODO inc_links_count_by_id increments links count of hash on DB side
+            hash_id = hash_record.id
             ChunkHashes.inc_links_count_by_id(hash_record.id)
 
         return hash_id
 
 
     @staticmethod
-    def load(filepath):
+    def download(filepath):
         file_record = Files.get_record(filepath)
         if not file_record:
             raise Exception("file {path} not found in Files table".format(path=filepath))
 
-        # TODO get_sorted_hash_ids_by_chunk_order_for_file_id returns list of hash_ids sorted by chunk order
-        #  for particular file. All needed data can be gathered from Chunks table.
-        #  Sorting can be performed on DB side (in SQL query) or on our side.
-        #  The preferred way is our side but it can require several SQL queries
         hash_ids = Chunks.get_sorted_hash_ids_by_chunk_order_for_file_id(file_record.id)
 
         chunk_data_filepaths = [get_full_filepath_in_workdir(hash_id) for hash_id in hash_ids]
-        ChunkWriter.write_chunks(chunk_data_filepaths, get_full_filepath_in_workdir(Main.result_file_name))
+        ChunkWriter.write_chunks(chunk_data_filepaths, Main.result_file_name)
